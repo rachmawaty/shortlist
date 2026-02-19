@@ -4,8 +4,9 @@ import { storage } from "./storage";
 import { parseResume, evaluateJob } from "./openai";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import multer from "multer";
-import * as pdfParseModule from "pdf-parse";
-const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const { PDFParse } = require("pdf-parse");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -43,8 +44,9 @@ export async function registerRoutes(
       let rawText = "";
 
       if (req.file) {
-        const pdfData = await pdfParse(req.file.buffer);
-        rawText = pdfData.text;
+        const parser = new PDFParse({ verbosity: 0 });
+        await parser.load(req.file.buffer);
+        rawText = await parser.getText();
       } else if (req.body.rawText) {
         rawText = req.body.rawText;
       }
