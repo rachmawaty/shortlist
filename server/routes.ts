@@ -4,9 +4,23 @@ import { storage } from "./storage";
 import { parseResume, evaluateJob } from "./openai";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import multer from "multer";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const { PDFParse } = require("pdf-parse");
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+
+async function extractTextFromPdf(buffer: Buffer): Promise<string> {
+  const data = new Uint8Array(buffer);
+  const doc = await getDocument({ data, useSystemFonts: true }).promise;
+  const pages: string[] = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    const text = content.items
+      .filter((item: any) => "str" in item)
+      .map((item: any) => item.str)
+      .join(" ");
+    pages.push(text);
+  }
+  return pages.join("\n");
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -44,9 +58,7 @@ export async function registerRoutes(
       let rawText = "";
 
       if (req.file) {
-        const parser = new PDFParse({ verbosity: 0 });
-        await parser.load(req.file.buffer);
-        rawText = await parser.getText();
+        rawText = await extractTextFromPdf(req.file.buffer);
       } else if (req.body.rawText) {
         rawText = req.body.rawText;
       }
