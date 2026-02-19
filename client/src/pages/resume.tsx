@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -16,31 +15,146 @@ import {
   BarChart3,
   Loader2,
   RefreshCw,
+  FileUp,
+  X,
 } from "lucide-react";
 import type { Resume } from "@shared/schema";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+function DropZone({
+  onFileSelect,
+  selectedFile,
+  onClear,
+  isPending,
+}: {
+  onFileSelect: (file: File) => void;
+  selectedFile: File | null;
+  onClear: () => void;
+  isPending: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+      const file = e.dataTransfer.files[0];
+      if (file && file.type === "application/pdf") {
+        onFileSelect(file);
+      }
+    },
+    [onFileSelect]
+  );
+
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        onFileSelect(file);
+      }
+    },
+    [onFileSelect]
+  );
+
+  if (selectedFile) {
+    return (
+      <div className="flex items-center gap-3 p-4 rounded-md border bg-muted/30" data-testid="selected-file-info">
+        <FileText className="w-8 h-8 text-primary shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+          <p className="text-xs text-muted-foreground">
+            {(selectedFile.size / 1024).toFixed(0)} KB
+          </p>
+        </div>
+        {!isPending && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClear}
+            data-testid="button-clear-file"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`relative flex flex-col items-center justify-center rounded-md border-2 border-dashed p-8 transition-colors cursor-pointer ${
+        isDragOver
+          ? "border-primary bg-primary/5"
+          : "border-muted-foreground/25 hover-elevate"
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onClick={() => inputRef.current?.click()}
+      data-testid="dropzone-resume"
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={handleChange}
+        data-testid="input-file-resume"
+      />
+      <FileUp className="w-10 h-10 text-muted-foreground mb-3" />
+      <p className="text-sm font-medium mb-1">Drop your resume PDF here</p>
+      <p className="text-xs text-muted-foreground">
+        or click to browse files (PDF only, max 10 MB)
+      </p>
+    </div>
+  );
+}
 
 export default function ResumePage() {
   const { toast } = useToast();
-  const [resumeText, setResumeText] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const { data: resume, isLoading } = useQuery<Resume | null>({
     queryKey: ["/api/resume"],
   });
 
   const uploadMutation = useMutation({
-    mutationFn: async (text: string) => {
-      const res = await apiRequest("POST", "/api/resume", { rawText: text });
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/resume", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to upload resume");
+      }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/resume"] });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
-      setResumeText("");
+      setSelectedFile(null);
       toast({
         title: "Resume stored",
-        description: "I'll use this for all future job evaluations until you update it.",
+        description: "Your PDF has been parsed. I'll use this for all future job evaluations.",
       });
     },
     onError: (err: Error) => {
@@ -64,7 +178,7 @@ export default function ResumePage() {
         <p className="text-sm text-muted-foreground mt-1">
           {resume
             ? "Your resume is stored. It's used for all job evaluations."
-            : "Paste your resume below. I'll parse it and use it as your source of truth."}
+            : "Upload your resume as a PDF. I'll parse it and use it as your source of truth."}
         </p>
       </div>
 
@@ -170,19 +284,18 @@ export default function ResumePage() {
               <span className="text-sm font-medium">Update Resume</span>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              Uploading a new resume will replace the current one and recalculate all job match scores.
+              Upload a new PDF to replace the current resume. This will recalculate all job match scores.
             </p>
-            <Textarea
-              placeholder="Paste your updated resume text here..."
-              value={resumeText}
-              onChange={(e) => setResumeText(e.target.value)}
-              className="min-h-[120px] text-sm"
-              data-testid="input-resume-update"
+            <DropZone
+              onFileSelect={setSelectedFile}
+              selectedFile={selectedFile}
+              onClear={() => setSelectedFile(null)}
+              isPending={uploadMutation.isPending}
             />
             <Button
               className="mt-3"
-              onClick={() => uploadMutation.mutate(resumeText)}
-              disabled={!resumeText.trim() || uploadMutation.isPending}
+              onClick={() => selectedFile && uploadMutation.mutate(selectedFile)}
+              disabled={!selectedFile || uploadMutation.isPending}
               data-testid="button-update-resume"
             >
               {uploadMutation.isPending ? (
@@ -190,32 +303,31 @@ export default function ResumePage() {
               ) : (
                 <Upload className="w-4 h-4 mr-1" />
               )}
-              Update Resume
+              {uploadMutation.isPending ? "Parsing PDF..." : "Update Resume"}
             </Button>
           </Card>
         </div>
       ) : (
         <Card className="p-5">
-          <div className="flex flex-col items-center text-center py-6">
+          <div className="flex flex-col items-center text-center py-4 mb-4">
             <div className="flex items-center justify-center w-14 h-14 rounded-md bg-muted mb-4">
               <FileText className="w-7 h-7 text-muted-foreground" />
             </div>
-            <h3 className="text-sm font-semibold mb-1">No resume uploaded</h3>
-            <p className="text-xs text-muted-foreground max-w-sm mb-6">
-              Paste your full resume text below. I'll extract your skills, experience, seniority level, industries, and tools.
+            <h3 className="text-sm font-semibold mb-1" data-testid="text-empty-state">No resume uploaded</h3>
+            <p className="text-xs text-muted-foreground max-w-sm">
+              Upload your resume as a PDF. I'll extract your skills, experience, seniority level, industries, and tools.
             </p>
           </div>
-          <Textarea
-            placeholder="Paste your full resume text here..."
-            value={resumeText}
-            onChange={(e) => setResumeText(e.target.value)}
-            className="min-h-[200px] text-sm"
-            data-testid="input-resume-text"
+          <DropZone
+            onFileSelect={setSelectedFile}
+            selectedFile={selectedFile}
+            onClear={() => setSelectedFile(null)}
+            isPending={uploadMutation.isPending}
           />
           <Button
             className="mt-3 w-full"
-            onClick={() => uploadMutation.mutate(resumeText)}
-            disabled={!resumeText.trim() || uploadMutation.isPending}
+            onClick={() => selectedFile && uploadMutation.mutate(selectedFile)}
+            disabled={!selectedFile || uploadMutation.isPending}
             data-testid="button-upload-resume"
           >
             {uploadMutation.isPending ? (
@@ -223,7 +335,7 @@ export default function ResumePage() {
             ) : (
               <Upload className="w-4 h-4 mr-1" />
             )}
-            {uploadMutation.isPending ? "Parsing Resume..." : "Upload & Parse Resume"}
+            {uploadMutation.isPending ? "Parsing PDF..." : "Upload & Parse Resume"}
           </Button>
         </Card>
       )}

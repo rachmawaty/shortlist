@@ -3,6 +3,21 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { parseResume, evaluateJob } from "./openai";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import multer from "multer";
+import * as pdfParseModule from "pdf-parse";
+const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === "application/pdf") {
+      cb(null, true);
+    } else {
+      cb(new Error("Only PDF files are allowed"));
+    }
+  },
+});
 
 export async function registerRoutes(
   httpServer: Server,
@@ -22,12 +37,20 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/resume", isAuthenticated, async (req: any, res) => {
+  app.post("/api/resume", isAuthenticated, upload.single("file"), async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { rawText } = req.body;
-      if (!rawText || typeof rawText !== "string" || rawText.trim().length === 0) {
-        return res.status(400).json({ message: "Resume text is required" });
+      let rawText = "";
+
+      if (req.file) {
+        const pdfData = await pdfParse(req.file.buffer);
+        rawText = pdfData.text;
+      } else if (req.body.rawText) {
+        rawText = req.body.rawText;
+      }
+
+      if (!rawText || rawText.trim().length === 0) {
+        return res.status(400).json({ message: "Could not extract text from the PDF. Please try a different file." });
       }
 
       const parsed = await parseResume(rawText);
@@ -42,8 +65,11 @@ export async function registerRoutes(
       });
 
       res.json(resume);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading resume:", error);
+      if (error.message === "Only PDF files are allowed") {
+        return res.status(400).json({ message: "Only PDF files are accepted" });
+      }
       res.status(500).json({ message: "Failed to parse and store resume" });
     }
   });
