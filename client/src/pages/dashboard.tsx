@@ -25,17 +25,29 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   BarChart3,
   Target,
   AlertTriangle,
   CheckCircle2,
-  Clock,
   Eye,
   PlusCircle,
   TrendingUp,
   TrendingDown,
   Minus,
   Bell,
+  Trash2,
+  ExternalLink,
 } from "lucide-react";
 import type { Job } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -58,16 +70,6 @@ function FitBadge({ level }: { level: string }) {
       {level}
     </Badge>
   );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const variant =
-    status === "Interview" || status === "Offer"
-      ? "default"
-      : status === "Rejected"
-        ? "destructive"
-        : "secondary";
-  return <Badge variant={variant}>{status}</Badge>;
 }
 
 function StatCard({
@@ -114,6 +116,19 @@ export default function Dashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/jobs/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({ title: "Job removed", description: "The job has been removed from your tracker." });
+    },
+    onError: () => {
+      toast({ title: "Failed to remove job", variant: "destructive" });
     },
   });
 
@@ -228,13 +243,11 @@ export default function Dashboard() {
                 <TableRow>
                   <TableHead className="min-w-[180px]">Job Title</TableHead>
                   <TableHead className="min-w-[120px]">Company</TableHead>
-                  <TableHead>Industry</TableHead>
-                  <TableHead>Deadline</TableHead>
                   <TableHead>Fit</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Aging</TableHead>
                   <TableHead>Verdict</TableHead>
-                  <TableHead className="w-[60px]"></TableHead>
+                  <TableHead className="w-[100px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -244,15 +257,25 @@ export default function Dashboard() {
                   return (
                     <TableRow key={job.id} data-testid={`row-job-${job.id}`}>
                       <TableCell>
-                        <Link href={`/job/${job.id}`}>
-                          <span className="font-medium text-sm hover:underline cursor-pointer" data-testid={`text-job-title-${job.id}`}>
-                            {job.title}
-                          </span>
-                        </Link>
+                        <div className="flex items-center gap-1.5">
+                          <Link href={`/job/${job.id}`}>
+                            <span className="font-medium text-sm hover:underline cursor-pointer" data-testid={`text-job-title-${job.id}`}>
+                              {job.title}
+                            </span>
+                          </Link>
+                          {job.jobUrl && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <a href={job.jobUrl} target="_blank" rel="noopener noreferrer" data-testid={`link-job-url-${job.id}`}>
+                                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                                </a>
+                              </TooltipTrigger>
+                              <TooltipContent>Open original job post</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-sm" data-testid={`text-job-company-${job.id}`}>{job.company}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{job.industry}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{job.deadline}</TableCell>
                       <TableCell><FitBadge level={job.fitLevel} /></TableCell>
                       <TableCell>
                         <Select
@@ -310,11 +333,37 @@ export default function Dashboard() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Link href={`/job/${job.id}`}>
-                          <Button size="icon" variant="ghost" data-testid={`button-view-job-${job.id}`}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </Link>
+                        <div className="flex items-center gap-0.5">
+                          <Link href={`/job/${job.id}`}>
+                            <Button size="icon" variant="ghost" data-testid={`button-view-job-${job.id}`}>
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </Link>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="icon" variant="ghost" data-testid={`button-delete-job-${job.id}`}>
+                                <Trash2 className="w-4 h-4 text-muted-foreground" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Remove this job?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently remove "{job.title}" at {job.company} from your tracker. This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteMutation.mutate(job.id)}
+                                  data-testid="button-confirm-delete"
+                                >
+                                  Remove
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

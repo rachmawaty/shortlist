@@ -36,6 +36,8 @@ export const jobs = pgTable("jobs", {
   appliedDate: text("applied_date"),
   status: text("status").notNull().default("Not Applied"),
   rawDescription: text("raw_description").notNull(),
+  jobUrl: text("job_url"),
+  notes: text("notes"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

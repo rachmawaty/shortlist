@@ -1,10 +1,12 @@
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -12,6 +14,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
   Building2,
@@ -25,6 +38,10 @@ import {
   XCircle,
   AlertTriangle,
   Shield,
+  ExternalLink,
+  Save,
+  StickyNote,
+  Trash2,
 } from "lucide-react";
 import type { Job } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -40,19 +57,43 @@ function getAgingDays(appliedDate: string | null): number | null {
 export default function JobDetailPage() {
   const { toast } = useToast();
   const params = useParams<{ id: string }>();
+  const [, setLocation] = useLocation();
   const jobId = parseInt(params.id || "0");
+  const [notes, setNotes] = useState("");
+  const [notesDirty, setNotesDirty] = useState(false);
 
   const { data: job, isLoading } = useQuery<Job>({
     queryKey: ["/api/jobs", jobId],
   });
 
+  useEffect(() => {
+    if (job) {
+      setNotes(job.notes || "");
+      setNotesDirty(false);
+    }
+  }, [job]);
+
   const updateMutation = useMutation({
-    mutationFn: async ({ status, applied, appliedDate }: { status: string; applied?: boolean; appliedDate?: string }) => {
-      await apiRequest("PATCH", `/api/jobs/${jobId}`, { status, applied, appliedDate });
+    mutationFn: async (payload: Record<string, unknown>) => {
+      await apiRequest("PATCH", `/api/jobs/${jobId}`, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/jobs/${jobId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({ title: "Job removed", description: "The job has been removed from your tracker." });
+      setLocation("/");
+    },
+    onError: () => {
+      toast({ title: "Failed to remove job", variant: "destructive" });
     },
   });
 
@@ -67,6 +108,17 @@ export default function JobDetailPage() {
     if (isApplying) {
       toast({ title: "Marked as Applied" });
     }
+  };
+
+  const handleSaveNotes = () => {
+    updateMutation.mutate({ notes }, {
+      onSuccess: () => {
+        setNotesDirty(false);
+        toast({ title: "Notes saved" });
+        queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      },
+    });
   };
 
   if (isLoading) {
@@ -95,16 +147,42 @@ export default function JobDetailPage() {
   const aging = getAgingDays(job.appliedDate);
   const needsFollow = job.applied && aging !== null && aging > 14 && job.status !== "Rejected" && job.status !== "Offer";
   const FitIcon = job.fitLevel === "High" ? TrendingUp : job.fitLevel === "Medium" ? Minus : TrendingDown;
-  const fitColor = job.fitLevel === "High" ? "text-primary" : job.fitLevel === "Medium" ? "text-muted-foreground" : "text-destructive";
 
   return (
     <div className="p-6 space-y-6 max-w-3xl mx-auto">
-      <Link href="/">
-        <Button variant="ghost" size="sm" data-testid="button-back">
-          <ArrowLeft className="w-4 h-4 mr-1" />
-          Back
-        </Button>
-      </Link>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <Link href="/">
+          <Button variant="ghost" size="sm" data-testid="button-back">
+            <ArrowLeft className="w-4 h-4 mr-1" />
+            Back
+          </Button>
+        </Link>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="ghost" size="sm" data-testid="button-delete-job">
+              <Trash2 className="w-4 h-4 mr-1 text-muted-foreground" />
+              <span className="text-muted-foreground">Remove</span>
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove this job?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently remove "{job.title}" at {job.company} from your tracker. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteMutation.mutate()}
+                data-testid="button-confirm-delete"
+              >
+                Remove
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -116,6 +194,21 @@ export default function JobDetailPage() {
             </div>
             <span className="text-muted-foreground">|</span>
             <span className="text-sm text-muted-foreground">{job.industry}</span>
+            {job.jobUrl && (
+              <>
+                <span className="text-muted-foreground">|</span>
+                <a
+                  href={job.jobUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-sm text-primary hover:underline"
+                  data-testid="link-job-url"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  View Original Post
+                </a>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -260,6 +353,36 @@ export default function JobDetailPage() {
           <h4 className="text-sm font-semibold mb-2">Hiring Manager Verdict</h4>
           <p className="text-sm leading-relaxed" data-testid="text-verdict">{job.verdict}</p>
         </div>
+      </Card>
+
+      <Card className="p-5 space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <StickyNote className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Your Notes</h3>
+          </div>
+          {notesDirty && (
+            <Button
+              size="sm"
+              onClick={handleSaveNotes}
+              disabled={updateMutation.isPending}
+              data-testid="button-save-notes"
+            >
+              <Save className="w-4 h-4 mr-1" />
+              Save
+            </Button>
+          )}
+        </div>
+        <Textarea
+          placeholder="Add your personal notes, comments, or follow-up reminders for this position..."
+          value={notes}
+          onChange={(e) => {
+            setNotes(e.target.value);
+            setNotesDirty(true);
+          }}
+          className="min-h-[100px] text-sm"
+          data-testid="input-job-notes"
+        />
       </Card>
 
       <Card className="p-5">

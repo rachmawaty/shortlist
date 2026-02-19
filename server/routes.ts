@@ -117,7 +117,7 @@ export async function registerRoutes(
   app.post("/api/jobs/evaluate", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { rawDescription } = req.body;
+      const { rawDescription, jobUrl } = req.body;
       if (!rawDescription || typeof rawDescription !== "string" || rawDescription.trim().length === 0) {
         return res.status(400).json({ message: "Job description is required" });
       }
@@ -153,6 +153,8 @@ export async function registerRoutes(
         appliedDate: null,
         status: "Not Applied",
         rawDescription,
+        jobUrl: jobUrl || null,
+        notes: null,
       });
 
       res.json(job);
@@ -166,11 +168,13 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const id = parseInt(req.params.id);
-      const { status, applied, appliedDate } = req.body;
+      const { status, applied, appliedDate, notes, jobUrl } = req.body;
       const updates: any = {};
       if (status !== undefined) updates.status = status;
       if (applied !== undefined) updates.applied = applied;
       if (appliedDate !== undefined) updates.appliedDate = appliedDate;
+      if (notes !== undefined) updates.notes = notes;
+      if (jobUrl !== undefined) updates.jobUrl = jobUrl;
 
       const job = await storage.updateJob(id, userId, updates);
       if (!job) {
