@@ -3,8 +3,11 @@ import { pgTable, text, varchar, serial, integer, timestamp, json, boolean } fro
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export * from "./models/auth";
+
 export const resumes = pgTable("resumes", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
   rawText: text("raw_text").notNull(),
   skills: text("skills").array().notNull().default(sql`'{}'::text[]`),
   experience: json("experience").$type<{ title: string; company: string; duration: string; description: string }[]>().notNull().default(sql`'[]'::json`),
@@ -16,6 +19,7 @@ export const resumes = pgTable("resumes", {
 
 export const jobs = pgTable("jobs", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
   title: text("title").notNull(),
   company: text("company").notNull(),
   industry: text("industry").notNull().default("Not disclosed"),

@@ -1,5 +1,8 @@
-import { LayoutDashboard, FileText, PlusCircle, Target } from "lucide-react";
+import { LayoutDashboard, FileText, PlusCircle, Target, LogOut } from "lucide-react";
 import { useLocation, Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +24,10 @@ const navItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user } = useAuth();
+
+  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email || "User";
+  const initials = displayName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 
   return (
     <Sidebar>
@@ -60,10 +67,24 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4">
-        <p className="text-xs text-muted-foreground">
-          Brutally honest. Evidence-based.
-        </p>
+      <SidebarFooter className="p-3">
+        <div className="flex items-center gap-2">
+          <Avatar className="w-8 h-8" data-testid="avatar-user">
+            <AvatarImage src={user?.profileImageUrl || undefined} alt={displayName} />
+            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate" data-testid="text-user-name">{displayName}</p>
+            {user?.email && (
+              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+            )}
+          </div>
+          <Button variant="ghost" size="icon" asChild data-testid="button-logout">
+            <a href="/api/logout">
+              <LogOut className="w-4 h-4" />
+            </a>
+          </Button>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

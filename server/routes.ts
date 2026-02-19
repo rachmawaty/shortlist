@@ -2,15 +2,19 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { parseResume, evaluateJob } from "./openai";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Resume endpoints
-  app.get("/api/resume", async (_req, res) => {
+  await setupAuth(app);
+  registerAuthRoutes(app);
+
+  app.get("/api/resume", isAuthenticated, async (req: any, res) => {
     try {
-      const resume = await storage.getResume();
+      const userId = req.user.claims.sub;
+      const resume = await storage.getResume(userId);
       res.json(resume);
     } catch (error) {
       console.error("Error fetching resume:", error);
@@ -18,8 +22,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/resume", async (req, res) => {
+  app.post("/api/resume", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const { rawText } = req.body;
       if (!rawText || typeof rawText !== "string" || rawText.trim().length === 0) {
         return res.status(400).json({ message: "Resume text is required" });
@@ -27,6 +32,7 @@ export async function registerRoutes(
 
       const parsed = await parseResume(rawText);
       const resume = await storage.upsertResume({
+        userId,
         rawText,
         skills: parsed.skills,
         experience: parsed.experience,
@@ -42,10 +48,10 @@ export async function registerRoutes(
     }
   });
 
-  // Job endpoints
-  app.get("/api/jobs", async (_req, res) => {
+  app.get("/api/jobs", isAuthenticated, async (req: any, res) => {
     try {
-      const jobs = await storage.getAllJobs();
+      const userId = req.user.claims.sub;
+      const jobs = await storage.getAllJobs(userId);
       res.json(jobs);
     } catch (error) {
       console.error("Error fetching jobs:", error);
@@ -53,10 +59,11 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/jobs/:id", async (req, res) => {
+  app.get("/api/jobs/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const id = parseInt(req.params.id);
-      const job = await storage.getJob(id);
+      const job = await storage.getJob(id, userId);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
@@ -67,14 +74,15 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/jobs/evaluate", async (req, res) => {
+  app.post("/api/jobs/evaluate", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const { rawDescription } = req.body;
       if (!rawDescription || typeof rawDescription !== "string" || rawDescription.trim().length === 0) {
         return res.status(400).json({ message: "Job description is required" });
       }
 
-      const resume = await storage.getResume();
+      const resume = await storage.getResume(userId);
       if (!resume) {
         return res.status(400).json({ message: "Please upload your resume first" });
       }
@@ -88,6 +96,7 @@ export async function registerRoutes(
       });
 
       const job = await storage.createJob({
+        userId,
         title: evaluation.title,
         company: evaluation.company,
         industry: evaluation.industry,
@@ -113,8 +122,9 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/jobs/:id", async (req, res) => {
+  app.patch("/api/jobs/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const id = parseInt(req.params.id);
       const { status, applied, appliedDate } = req.body;
       const updates: any = {};
@@ -122,7 +132,7 @@ export async function registerRoutes(
       if (applied !== undefined) updates.applied = applied;
       if (appliedDate !== undefined) updates.appliedDate = appliedDate;
 
-      const job = await storage.updateJob(id, updates);
+      const job = await storage.updateJob(id, userId, updates);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
@@ -133,10 +143,11 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/jobs/:id", async (req, res) => {
+  app.delete("/api/jobs/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const id = parseInt(req.params.id);
-      await storage.deleteJob(id);
+      await storage.deleteJob(id, userId);
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting job:", error);
