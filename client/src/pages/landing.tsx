@@ -1,7 +1,18 @@
+import { useState } from "react";
 import { Target, FileSearch, BarChart3, Clock, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useQueryClient } from "@tanstack/react-query";
 import heroImage from "@/assets/images/hero-abstract.png";
 
 const features = [
@@ -22,7 +33,212 @@ const features = [
   },
 ];
 
+function AuthDialog({
+  open,
+  onOpenChange,
+  defaultTab = "signin",
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  defaultTab?: "signin" | "register";
+}) {
+  const queryClient = useQueryClient();
+
+  const [signInEmail, setSignInEmail] = useState("");
+  const [signInPassword, setSignInPassword] = useState("");
+  const [signInError, setSignInError] = useState("");
+  const [signInLoading, setSignInLoading] = useState(false);
+
+  const [regFirstName, setRegFirstName] = useState("");
+  const [regLastName, setRegLastName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regError, setRegError] = useState("");
+  const [regLoading, setRegLoading] = useState(false);
+
+  async function handleSignIn(e: React.FormEvent) {
+    e.preventDefault();
+    setSignInError("");
+    setSignInLoading(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: signInEmail, password: signInPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSignInError(data.message || "Login failed");
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        onOpenChange(false);
+      }
+    } catch {
+      setSignInError("Network error. Please try again.");
+    } finally {
+      setSignInLoading(false);
+    }
+  }
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    setRegError("");
+    setRegLoading(true);
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          email: regEmail,
+          password: regPassword,
+          firstName: regFirstName || undefined,
+          lastName: regLastName || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRegError(data.message || "Registration failed");
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        onOpenChange(false);
+      }
+    } catch {
+      setRegError("Network error. Please try again.");
+    } finally {
+      setRegLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary">
+              <Target className="w-3.5 h-3.5 text-primary-foreground" />
+            </div>
+            Shortlist
+          </DialogTitle>
+        </DialogHeader>
+        <Tabs defaultValue={defaultTab}>
+          <TabsList className="w-full">
+            <TabsTrigger value="signin" className="flex-1">Sign In</TabsTrigger>
+            <TabsTrigger value="register" className="flex-1">Create Account</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="signin">
+            <form onSubmit={handleSignIn} className="space-y-4 mt-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="signin-email">Email</Label>
+                <Input
+                  id="signin-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={signInEmail}
+                  onChange={(e) => setSignInEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="signin-password">Password</Label>
+                <Input
+                  id="signin-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={signInPassword}
+                  onChange={(e) => setSignInPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
+              {signInError && (
+                <p className="text-sm text-destructive">{signInError}</p>
+              )}
+              <Button type="submit" className="w-full" disabled={signInLoading}>
+                {signInLoading ? "Signing in…" : "Sign In"}
+              </Button>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="register">
+            <form onSubmit={handleRegister} className="space-y-4 mt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="reg-first">First name</Label>
+                  <Input
+                    id="reg-first"
+                    placeholder="Jane"
+                    value={regFirstName}
+                    onChange={(e) => setRegFirstName(e.target.value)}
+                    autoComplete="given-name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="reg-last">Last name</Label>
+                  <Input
+                    id="reg-last"
+                    placeholder="Doe"
+                    value={regLastName}
+                    onChange={(e) => setRegLastName(e.target.value)}
+                    autoComplete="family-name"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="reg-email">Email</Label>
+                <Input
+                  id="reg-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="reg-password">Password</Label>
+                <Input
+                  id="reg-password"
+                  type="password"
+                  placeholder="At least 6 characters"
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+              {regError && (
+                <p className="text-sm text-destructive">{regError}</p>
+              )}
+              <Button type="submit" className="w-full" disabled={regLoading}>
+                {regLoading ? "Creating account…" : "Create Account"}
+              </Button>
+            </form>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function LandingPage() {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogTab, setDialogTab] = useState<"signin" | "register">("signin");
+
+  function openSignIn() {
+    setDialogTab("signin");
+    setDialogOpen(true);
+  }
+
+  function openRegister() {
+    setDialogTab("register");
+    setDialogOpen(true);
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-background/80 border-b">
@@ -35,8 +251,8 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button asChild data-testid="button-login-nav">
-              <a href="/api/login">Sign In</a>
+            <Button onClick={openSignIn} data-testid="button-login-nav">
+              Sign In
             </Button>
           </div>
         </div>
@@ -62,11 +278,9 @@ export default function LandingPage() {
               what's missing, and whether you should even bother applying.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Button size="lg" asChild data-testid="button-get-started">
-                <a href="/api/login">
-                  Get Started
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </a>
+              <Button size="lg" onClick={openRegister} data-testid="button-get-started">
+                Get Started
+                <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
               <Button size="lg" variant="outline" className="backdrop-blur-sm bg-white/10 text-white border-white/20" asChild>
                 <a href="#features">See How It Works</a>
@@ -111,13 +325,11 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="font-serif text-2xl sm:text-3xl font-bold mb-4">Ready to get honest about your job search?</h2>
           <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-            Sign up in seconds with your Google account or email. Your data stays private and secure.
+            Sign up in seconds with your email. Your data stays private and secure.
           </p>
-          <Button size="lg" asChild data-testid="button-cta-bottom">
-            <a href="/api/login">
-              Start Tracking Jobs
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </a>
+          <Button size="lg" onClick={openRegister} data-testid="button-cta-bottom">
+            Start Tracking Jobs
+            <ArrowRight className="w-4 h-4 ml-2" />
           </Button>
         </div>
       </section>
@@ -131,6 +343,12 @@ export default function LandingPage() {
           <p>Brutally honest. Evidence-based.</p>
         </div>
       </footer>
+
+      <AuthDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        defaultTab={dialogTab}
+      />
     </div>
   );
 }

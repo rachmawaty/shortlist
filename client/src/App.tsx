@@ -7,13 +7,13 @@ import { ThemeProvider } from "@/lib/theme";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { useAuth } from "@/hooks/use-auth";
 import Dashboard from "@/pages/dashboard";
 import ResumePage from "@/pages/resume";
 import AddJobPage from "@/pages/add-job";
 import JobDetailPage from "@/pages/job-detail";
-import LandingPage from "@/pages/landing";
 import NotFound from "@/pages/not-found";
+import LandingPage from "@/pages/landing";
+import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 
 function Router() {

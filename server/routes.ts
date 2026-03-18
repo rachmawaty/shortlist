@@ -1,25 +1,14 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { parseResume, evaluateJob } from "./openai";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { parseResume, evaluateJob } from "./claude";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./auth";
 import multer from "multer";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import pdfParse from "pdf-parse";
 
 async function extractTextFromPdf(buffer: Buffer): Promise<string> {
-  const data = new Uint8Array(buffer);
-  const doc = await getDocument({ data, useSystemFonts: true }).promise;
-  const pages: string[] = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    const text = content.items
-      .filter((item: any) => "str" in item)
-      .map((item: any) => item.str)
-      .join(" ");
-    pages.push(text);
-  }
-  return pages.join("\n");
+  const data = await pdfParse(buffer);
+  return data.text;
 }
 
 const upload = multer({
@@ -43,7 +32,7 @@ export async function registerRoutes(
 
   app.get("/api/resume", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId as string;
       const resume = await storage.getResume(userId);
       res.json(resume);
     } catch (error) {
@@ -54,7 +43,7 @@ export async function registerRoutes(
 
   app.post("/api/resume", isAuthenticated, upload.single("file"), async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId as string;
       let rawText = "";
 
       if (req.file) {
@@ -90,7 +79,7 @@ export async function registerRoutes(
 
   app.get("/api/jobs", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId as string;
       const jobs = await storage.getAllJobs(userId);
       res.json(jobs);
     } catch (error) {
@@ -101,7 +90,7 @@ export async function registerRoutes(
 
   app.get("/api/jobs/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId as string;
       const id = parseInt(req.params.id);
       const job = await storage.getJob(id, userId);
       if (!job) {
@@ -116,7 +105,7 @@ export async function registerRoutes(
 
   app.post("/api/jobs/evaluate", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId as string;
       const { rawDescription, jobUrl } = req.body;
       if (!rawDescription || typeof rawDescription !== "string" || rawDescription.trim().length === 0) {
         return res.status(400).json({ message: "Job description is required" });
@@ -168,7 +157,7 @@ export async function registerRoutes(
 
   app.patch("/api/jobs/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId as string;
       const id = parseInt(req.params.id);
       const { status, applied, appliedDate, notes, jobUrl } = req.body;
       const updates: any = {};
@@ -191,7 +180,7 @@ export async function registerRoutes(
 
   app.delete("/api/jobs/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId as string;
       const id = parseInt(req.params.id);
       await storage.deleteJob(id, userId);
       res.status(204).send();

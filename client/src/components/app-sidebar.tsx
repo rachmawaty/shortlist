@@ -1,7 +1,7 @@
 import { LayoutDashboard, FileText, PlusCircle, Target, LogOut } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -24,10 +24,10 @@ const navItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user } = useAuth();
+  const { user, logout, isLoggingOut } = useAuth();
 
   const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email || "User";
-  const initials = displayName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+  const initials = displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
 
   return (
     <Sidebar>
@@ -70,7 +70,6 @@ export function AppSidebar() {
       <SidebarFooter className="p-3">
         <div className="flex items-center gap-2">
           <Avatar className="w-8 h-8" data-testid="avatar-user">
-            <AvatarImage src={user?.profileImageUrl || undefined} alt={displayName} />
             <AvatarFallback className="text-xs">{initials}</AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
@@ -79,10 +78,16 @@ export function AppSidebar() {
               <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             )}
           </div>
-          <Button variant="ghost" size="icon" asChild data-testid="button-logout">
-            <a href="/api/logout">
-              <LogOut className="w-4 h-4" />
-            </a>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-8 h-8 shrink-0"
+            onClick={() => logout()}
+            disabled={isLoggingOut}
+            data-testid="button-logout"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
           </Button>
         </div>
       </SidebarFooter>

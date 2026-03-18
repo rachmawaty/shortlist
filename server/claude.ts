@@ -1,8 +1,7 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export async function parseResume(rawText: string): Promise<{
@@ -12,12 +11,10 @@ export async function parseResume(rawText: string): Promise<{
   industries: string[];
   tools: string[];
 }> {
-  const response = await openai.chat.completions.create({
-    model: "gpt-5-mini",
-    messages: [
-      {
-        role: "system",
-        content: `You are a resume parser. Extract structured information from the resume text provided.
+  const response = await client.messages.create({
+    model: "claude-opus-4-6",
+    max_tokens: 4096,
+    system: `You are a resume parser. Extract structured information from the resume text provided.
 Return a JSON object with exactly these fields:
 - skills: string[] (technical and soft skills)
 - experience: array of { title: string, company: string, duration: string, description: string }
@@ -25,18 +22,12 @@ Return a JSON object with exactly these fields:
 - industries: string[] (industries the candidate has worked in)
 - tools: string[] (specific tools, technologies, platforms, frameworks mentioned)
 
-Be thorough but concise. Extract only what is explicitly stated.`,
-      },
-      {
-        role: "user",
-        content: rawText,
-      },
-    ],
-    response_format: { type: "json_object" },
-    max_completion_tokens: 4096,
+Be thorough but concise. Extract only what is explicitly stated.
+Return ONLY valid JSON, no markdown, no explanation.`,
+    messages: [{ role: "user", content: rawText }],
   });
 
-  const content = response.choices[0]?.message?.content || "{}";
+  const content = response.content[0].type === "text" ? response.content[0].text : "{}";
   const parsed = JSON.parse(content);
   return {
     skills: parsed.skills || [],
@@ -72,12 +63,10 @@ export async function evaluateJob(
   verdict: string;
   recommendation: string;
 }> {
-  const response = await openai.chat.completions.create({
-    model: "gpt-5-mini",
-    messages: [
-      {
-        role: "system",
-        content: `You are a brutally honest hiring manager and recruiter evaluating a job candidate's fit for a position.
+  const response = await client.messages.create({
+    model: "claude-opus-4-6",
+    max_tokens: 4096,
+    system: `You are a brutally honest hiring manager and recruiter evaluating a job candidate's fit for a position.
 
 You have the candidate's resume data:
 Skills: ${resumeData.skills.join(", ")}
@@ -105,18 +94,12 @@ Return a JSON object with exactly these fields:
 - recommendation: string (exactly one of: "Apply", "Apply only if referrals/networking exist", "Do not apply (low ROI)")
 
 Do NOT hallucinate dates or visa information. If information is not in the job description, mark it as "Not disclosed".
-Be specific about strengths and gaps - reference actual skills/experience from the resume.`,
-      },
-      {
-        role: "user",
-        content: jobDescription,
-      },
-    ],
-    response_format: { type: "json_object" },
-    max_completion_tokens: 4096,
+Be specific about strengths and gaps - reference actual skills/experience from the resume.
+Return ONLY valid JSON, no markdown, no explanation.`,
+    messages: [{ role: "user", content: jobDescription }],
   });
 
-  const content = response.choices[0]?.message?.content || "{}";
+  const content = response.content[0].type === "text" ? response.content[0].text : "{}";
   const parsed = JSON.parse(content);
   return {
     title: parsed.title || "Unknown Position",
