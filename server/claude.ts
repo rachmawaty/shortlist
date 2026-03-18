@@ -4,6 +4,11 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+function extractJson(text: string): string {
+  // Strip markdown code blocks if Claude wraps the response
+  return text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+}
+
 export async function parseResume(rawText: string): Promise<{
   skills: string[];
   experience: { title: string; company: string; duration: string; description: string }[];
@@ -27,7 +32,7 @@ Return ONLY valid JSON, no markdown, no explanation.`,
     messages: [{ role: "user", content: rawText }],
   });
 
-  const content = response.content[0].type === "text" ? response.content[0].text : "{}";
+  const content = response.content[0].type === "text" ? extractJson(response.content[0].text) : "{}";
   const parsed = JSON.parse(content);
   return {
     skills: parsed.skills || [],
@@ -99,7 +104,7 @@ Return ONLY valid JSON, no markdown, no explanation.`,
     messages: [{ role: "user", content: jobDescription }],
   });
 
-  const content = response.content[0].type === "text" ? response.content[0].text : "{}";
+  const content = response.content[0].type === "text" ? extractJson(response.content[0].text) : "{}";
   const parsed = JSON.parse(content);
   return {
     title: parsed.title || "Unknown Position",
