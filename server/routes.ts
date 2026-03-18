@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { parseResume, evaluateJob } from "./claude";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./auth";
 import multer from "multer";
-import pdfParse from "pdf-parse";
+import pdfParseModule from "pdf-parse";
+const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
 
 async function extractTextFromPdf(buffer: Buffer): Promise<string> {
   const data = await pdfParse(buffer);
